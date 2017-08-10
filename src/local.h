@@ -77,6 +77,7 @@ typedef struct remote_ctx {
     ev_timer watcher;
 
     int connected;
+    int auth_recived; //  add by gowinder, init is zero, after auth info received is 1
     struct remote *remote;
 } remote_ctx_t;
 

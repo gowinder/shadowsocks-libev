@@ -213,8 +213,15 @@ if (WITH_STATIC)
         ARCHIVE DESTINATION lib)
 endif ()
 
-install(TARGETS shadowsocks-libev-shared
-        LIBRARY DESTINATION lib)
+if(CMAKE_HOST_WIN32)
+    install(TARGETS shadowsocks-libev-shared
+            RUNTIME DESTINATION .)
+else()
+    install(TARGETS shadowsocks-libev-shared
+            RUNTIME DESTINATION .)
+endif()
+#install(TARGETS shadowsocks-libev-shared
+#       LIBRARY DESTINATION lib)
 
 install(FILES shadowsocks.h DESTINATION include)
 

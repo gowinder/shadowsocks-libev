@@ -523,6 +523,7 @@ server_recv_cb(EV_P_ ev_io *w, int revents)
                 return;
             }
 
+
             // Fake reply
             if (server->stage == STAGE_HANDSHAKE) {
                 struct socks5_response response;
@@ -670,6 +671,27 @@ server_recv_cb(EV_P_ ev_io *w, int revents)
             if (buf->len > 0) {
                 memmove(buf->data, buf->data + 3 + abuf_len, buf->len);
             }
+
+            //  add by gowinder
+            //  add auth info after socks address
+            const int TEMP_LEN = 255;
+            char* ss_acount_id = "19";
+            char* ss_seesion_id = "1234";
+            char* ss_token = "34qcPxEJcrE4xVLa41J5";
+            char ss_auth[TEMP_LEN];
+            memset(ss_auth, 0, TEMP_LEN);
+            strcat(ss_auth, ss_acount_id);
+            strcat(ss_auth, "|");
+            strcat(ss_auth, ss_seesion_id);
+            strcat(ss_auth, "|");
+            strcat(ss_auth, ss_token);
+            int16_t ss_auth_str_len = strlen(ss_auth);
+            int16_t net_len = htons(ss_auth_str_len);
+            memcpy(abuf->data + abuf->len, &net_len, sizeof(ss_auth_str_len));
+            abuf->len += sizeof(ss_auth_str_len);
+            memcpy(abuf->data + abuf->len, ss_auth, ss_auth_str_len);
+            abuf->len += ss_auth_str_len;
+            abuf_len = abuf->len;
 
             if (verbose) {
                 if (sni_detected || atyp == 3)
@@ -905,6 +927,31 @@ remote_recv_cb(EV_P_ ev_io *w, int revents)
         } else if (err == CRYPTO_NEED_MORE) {
             return; // Wait for more
         }
+
+        //  add by gowinder receive auth info
+        if (!remote->recv_ctx->auth_recived) {
+            int32_t auth_ret = 0;
+            size_t auth_ret_size = sizeof(auth_ret);
+            if(server->buf->len < auth_ret_size)
+                return; // wait for auth ret
+            auth_ret = *server->buf->data;
+            auth_ret = ntohl(auth_ret);
+            if (auth_ret != 0)
+            {
+                LOGE("remote_recv_cb auth ret:", auth_ret);
+                close_and_free_remote(EV_A_ remote);
+                close_and_free_server(EV_A_ server);
+                return;
+            }
+            else{
+
+                server->buf->len -= auth_ret_size;
+                if(server->buf->len >0){
+                    memmove(server->buf->data, server->buf->data + auth_ret_size, server->buf->len);
+                }
+                remote->recv_ctx->auth_recived = 1;
+            }
+        }
     }
 
     int s = send(server->fd, server->buf->data, server->buf->len, 0);
@@ -1016,6 +1063,7 @@ new_remote(int fd, int timeout)
     memset(remote->recv_ctx, 0, sizeof(remote_ctx_t));
     memset(remote->send_ctx, 0, sizeof(remote_ctx_t));
     remote->recv_ctx->connected = 0;
+    remote->recv_ctx->auth_recived = 0; //  add by gowinder
     remote->send_ctx->connected = 0;
     remote->fd                  = fd;
     remote->recv_ctx->remote    = remote;
