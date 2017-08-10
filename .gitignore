@@ -91,3 +91,6 @@ doc/*.html
 *.tar.gz
 *.tgz
 #
+
+.idea/
+cmake-build-debug/

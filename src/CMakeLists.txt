@@ -5,6 +5,8 @@ else ()
     option(WITH_SS_REDIR "Build ss-redir" OFF)
 endif ()
 
+# add by gowinder for windows cygwin build
+add_definitions(-DHAVE_PCRE_H=1)
 
 set(SS_SNI_SOURCE
         http.c
@@ -213,13 +215,14 @@ if (WITH_STATIC)
         ARCHIVE DESTINATION lib)
 endif ()
 
-if(CMAKE_HOST_WIN32)
-    install(TARGETS shadowsocks-libev-shared
-            RUNTIME DESTINATION .)
-else()
-    install(TARGETS shadowsocks-libev-shared
-            RUNTIME DESTINATION .)
-endif()
+#if(CMAKE_HOST_WIN32)
+#    install(TARGETS shadowsocks-libev-shared
+#            RUNTIME DESTINATION .)
+#else()
+#    install(TARGETS shadowsocks-libev-shared
+#            LIBRARY  DESTINATION lib)
+#endif()
+
 #install(TARGETS shadowsocks-libev-shared
 #       LIBRARY DESTINATION lib)
 
