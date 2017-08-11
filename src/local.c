@@ -62,6 +62,7 @@
 #include "tls.h"
 #include "plugin.h"
 #include "local.h"
+#include "jconf.h"
 
 #ifndef LIB_ONLY
 #ifdef __APPLE__
@@ -1293,9 +1294,515 @@ accept_cb(EV_P_ ev_io *w, int revents)
     ev_io_start(EV_A_ & server->recv_ctx->io);
 }
 
+
+int start_ss_local(const char* ss_server, const char* ss_server_port, const char* ss_local_port, const char* ss_password, const char* ss_method, const char* ss_log_server_info){
+    int i, c;
+    int pid_flags    = 0;
+    int mtu          = 0;
+    int mptcp        = 0;
+    char *user       = NULL;
+    char *local_port = NULL;
+    char *local_addr = NULL;
+    char *password   = NULL;
+    char *key        = NULL;
+    char *timeout    = NULL;
+    char *method     = NULL;
+    char *pid_path   = NULL;
+    char *conf_path  = NULL;
+    char *iface      = NULL;
+
+    char *plugin      = NULL;
+    char *plugin_opts = NULL;
+    char *plugin_host = NULL;
+    char *plugin_port = NULL;
+    char tmp_port[8];
+
+    srand(time(NULL));
+
+    int remote_num = 0;
+    ss_addr_t remote_addr[MAX_REMOTE_NUM];
+    char *remote_port = NULL;
+
+    static struct option long_options[] = {
+            { "reuse-port",  no_argument,       NULL, GETOPT_VAL_REUSE_PORT },
+            { "fast-open",   no_argument,       NULL, GETOPT_VAL_FAST_OPEN },
+            { "acl",         required_argument, NULL, GETOPT_VAL_ACL },
+            { "mtu",         required_argument, NULL, GETOPT_VAL_MTU },
+            { "mptcp",       no_argument,       NULL, GETOPT_VAL_MPTCP },
+            { "plugin",      required_argument, NULL, GETOPT_VAL_PLUGIN },
+            { "plugin-opts", required_argument, NULL, GETOPT_VAL_PLUGIN_OPTS },
+            { "password",    required_argument, NULL, GETOPT_VAL_PASSWORD },
+            { "key",         required_argument, NULL, GETOPT_VAL_KEY },
+            { "help",        no_argument,       NULL, GETOPT_VAL_HELP },
+            { NULL,          0,                 NULL, 0 }
+    };
+
+    opterr = 0;
+
+    USE_TTY();
+
+    //  add by gowinder
+    remote_port = ss_server_port;
+    remote_addr[remote_num].host   = ss_server;
+    remote_addr[remote_num++].port = remote_port;
+    local_port = ss_local_port;
+    password = ss_password;
+    method = ss_method;
+
+    if (opterr) {
+        usage();
+        exit(EXIT_FAILURE);
+    }
+
+//    if (argc == 1) {
+//        if (conf_path == NULL) {
+//            conf_path = DEFAULT_CONF_PATH;
+//        }
+//    }
+    if (conf_path != NULL) {
+        jconf_t *conf = read_jconf(conf_path);
+        if (remote_num == 0) {
+            remote_num = conf->remote_num;
+            for (i = 0; i < remote_num; i++)
+                remote_addr[i] = conf->remote_addr[i];
+        }
+        if (remote_port == NULL) {
+            remote_port = conf->remote_port;
+        }
+        if (local_addr == NULL) {
+            local_addr = conf->local_addr;
+        }
+        if (local_port == NULL) {
+            local_port = conf->local_port;
+        }
+        if (password == NULL) {
+            password = conf->password;
+        }
+        if (key == NULL) {
+            key = conf->key;
+        }
+        if (method == NULL) {
+            method = conf->method;
+        }
+        if (timeout == NULL) {
+            timeout = conf->timeout;
+        }
+        if (user == NULL) {
+            user = conf->user;
+        }
+        if (plugin == NULL) {
+            plugin = conf->plugin;
+        }
+        if (plugin_opts == NULL) {
+            plugin_opts = conf->plugin_opts;
+        }
+        if (reuse_port == 0) {
+            reuse_port = conf->reuse_port;
+        }
+        if (fast_open == 0) {
+            fast_open = conf->fast_open;
+        }
+        if (mode == TCP_ONLY) {
+            mode = conf->mode;
+        }
+        if (mtu == 0) {
+            mtu = conf->mtu;
+        }
+        if (mptcp == 0) {
+            mptcp = conf->mptcp;
+        }
+#ifdef HAVE_SETRLIMIT
+        if (nofile == 0) {
+            nofile = conf->nofile;
+        }
+#endif
+        if (ipv6first == 0) {
+            ipv6first = conf->ipv6_first;
+        }
+    }
+
+    if (remote_num == 0 || remote_port == NULL ||
+        #ifndef HAVE_LAUNCHD
+        local_port == NULL ||
+        #endif
+        (password == NULL && key == NULL)) {
+        usage();
+        exit(EXIT_FAILURE);
+    }
+
+    if (plugin != NULL) {
+        uint16_t port = get_local_port();
+        if (port == 0) {
+            FATAL("failed to find a free port");
+        }
+        snprintf(tmp_port, 8, "%d", port);
+        plugin_host = "127.0.0.1";
+        plugin_port = tmp_port;
+
+        LOGI("plugin \"%s\" enabled", plugin);
+    }
+
+    if (method == NULL) {
+        method = "rc4-md5";
+    }
+
+    if (timeout == NULL) {
+        timeout = "60";
+    }
+
+#ifdef HAVE_SETRLIMIT
+    /*
+     * no need to check the return value here since we will show
+     * the user an error message if setrlimit(2) fails
+     */
+    if (nofile > 1024) {
+        if (verbose) {
+            LOGI("setting NOFILE to %d", nofile);
+        }
+        set_nofile(nofile);
+    }
+#endif
+
+    if (local_addr == NULL) {
+        local_addr = "127.0.0.1";
+    }
+
+//    USE_SYSLOG(argv[0], pid_flags);
+//    if (pid_flags) {
+//        daemonize(pid_path);
+//    }
+
+    if (fast_open == 1) {
+#ifdef TCP_FASTOPEN
+        LOGI("using tcp fast open");
+#else
+        LOGE("tcp fast open is not supported by this environment");
+        fast_open = 0;
+#endif
+    }
+
+    if (ipv6first) {
+        LOGI("resolving hostname to IPv6 address first");
+    }
+
+    if (plugin != NULL) {
+        int len = 0;
+        size_t buf_size = 256 * remote_num;
+        char *remote_str = ss_malloc(buf_size);
+
+        snprintf(remote_str, buf_size, "%s", remote_addr[0].host);
+        len = strlen(remote_str);
+        for (int i = 1; i < remote_num; i++) {
+            snprintf(remote_str + len, buf_size - len, "|%s", remote_addr[i].host);
+            len = strlen(remote_str);
+        }
+        int err = start_plugin(plugin, plugin_opts, remote_str,
+                               remote_port, plugin_host, plugin_port, MODE_CLIENT);
+        if (err) {
+            FATAL("failed to start the plugin");
+        }
+    }
+
+    // ignore SIGPIPE
+    signal(SIGPIPE, SIG_IGN);
+    signal(SIGABRT, SIG_IGN);
+
+    // Setup keys
+    LOGI("initializing ciphers... %s", method);
+    crypto = crypto_init(password, key, method);
+    if (crypto == NULL)
+        FATAL("failed to initialize ciphers");
+
+    // Setup proxy context
+    listen_ctx_t listen_ctx;
+    listen_ctx.remote_num  = remote_num;
+    listen_ctx.remote_addr = ss_malloc(sizeof(struct sockaddr *) * remote_num);
+    memset(listen_ctx.remote_addr, 0, sizeof(struct sockaddr *) * remote_num);
+    for (i = 0; i < remote_num; i++) {
+        char *host = remote_addr[i].host;
+        char *port = remote_addr[i].port == NULL ? remote_port :
+                     remote_addr[i].port;
+        if (plugin != NULL) {
+            host = plugin_host;
+            port = plugin_port;
+        }
+        struct sockaddr_storage *storage = ss_malloc(sizeof(struct sockaddr_storage));
+        memset(storage, 0, sizeof(struct sockaddr_storage));
+        if (get_sockaddr(host, port, storage, 1, ipv6first) == -1) {
+            FATAL("failed to resolve the provided hostname");
+        }
+        listen_ctx.remote_addr[i] = (struct sockaddr *)storage;
+
+        if (plugin != NULL) break;
+    }
+    listen_ctx.timeout = atoi(timeout);
+    listen_ctx.iface   = iface;
+    listen_ctx.mptcp   = mptcp;
+
+    // Setup signal handler
+    ev_signal_init(&sigint_watcher, signal_cb, SIGINT);
+    ev_signal_init(&sigterm_watcher, signal_cb, SIGTERM);
+    ev_signal_start(EV_DEFAULT, &sigint_watcher);
+    ev_signal_start(EV_DEFAULT, &sigterm_watcher);
+    ev_signal_init(&sigchld_watcher, signal_cb, SIGCHLD);
+    ev_signal_start(EV_DEFAULT, &sigchld_watcher);
+
+    struct ev_loop *loop = EV_DEFAULT;
+
+    if (mode != UDP_ONLY) {
+        // Setup socket
+        int listenfd;
+#ifdef HAVE_LAUNCHD
+        listenfd = launch_or_create(local_addr, local_port);
+#else
+        listenfd = create_and_bind(local_addr, local_port);
+#endif
+        if (listenfd == -1) {
+            FATAL("bind() error");
+        }
+        if (listen(listenfd, SOMAXCONN) == -1) {
+            FATAL("listen() error");
+        }
+        setnonblocking(listenfd);
+
+        listen_ctx.fd = listenfd;
+
+        ev_io_init(&listen_ctx.io, accept_cb, listenfd, EV_READ);
+        ev_io_start(loop, &listen_ctx.io);
+    }
+
+    // Setup UDP
+    if (mode != TCP_ONLY) {
+        LOGI("udprelay enabled");
+        char *host = remote_addr[0].host;
+        char *port = remote_addr[0].port == NULL ? remote_port : remote_addr[0].port;
+        struct sockaddr_storage *storage = ss_malloc(sizeof(struct sockaddr_storage));
+        memset(storage, 0, sizeof(struct sockaddr_storage));
+        if (get_sockaddr(host, port, storage, 1, ipv6first) == -1) {
+            FATAL("failed to resolve the provided hostname");
+        }
+        struct sockaddr *addr = (struct sockaddr *)storage;
+        udp_fd = init_udprelay(local_addr, local_port, addr,
+                               get_sockaddr_len(addr), mtu, crypto, listen_ctx.timeout, iface);
+    }
+
+#ifdef HAVE_LAUNCHD
+    if (local_port == NULL)
+        LOGI("listening through launchd");
+    else
+#endif
+
+    if (strcmp(local_addr, ":") > 0)
+        LOGI("listening at [%s]:%s", local_addr, local_port);
+    else
+        LOGI("listening at %s:%s", local_addr, local_port);
+
+    // setuid
+    if (user != NULL && !run_as(user)) {
+        FATAL("failed to switch user");
+    }
+
+    if (geteuid() == 0) {
+        LOGI("running from root user");
+    }
+
+    // Init connections
+    cork_dllist_init(&connections);
+
+    // Enter the loop
+    ev_run(loop, 0);
+
+    if (verbose) {
+        LOGI("closed gracefully");
+    }
+
+    // Clean up
+    if (plugin != NULL) {
+        stop_plugin();
+    }
+
+    if (mode != UDP_ONLY) {
+        ev_io_stop(loop, &listen_ctx.io);
+        free_connections(loop);
+
+        for (i = 0; i < remote_num; i++)
+            ss_free(listen_ctx.remote_addr[i]);
+        ss_free(listen_ctx.remote_addr);
+    }
+
+    if (mode != TCP_ONLY) {
+        free_udprelay();
+    }
+
+    return 0;
+}
+
 #ifndef LIB_ONLY
+
 int
-main(int argc, char **argv)
+main(int argc, char **argv){
+    int i, c;
+    int pid_flags    = 0;
+    int mtu          = 0;
+    int mptcp        = 0;
+    char *user       = NULL;
+    char *local_port = NULL;
+    char *local_addr = NULL;
+    char *password   = NULL;
+    char *key        = NULL;
+    char *timeout    = NULL;
+    char *method     = NULL;
+    char *pid_path   = NULL;
+    char *conf_path  = NULL;
+    char *iface      = NULL;
+
+    char *plugin      = NULL;
+    char *plugin_opts = NULL;
+    char *plugin_host = NULL;
+    char *plugin_port = NULL;
+    char tmp_port[8];
+
+    srand(time(NULL));
+
+    int remote_num = 0;
+    ss_addr_t remote_addr[MAX_REMOTE_NUM];
+    char *remote_port = NULL;
+
+    static struct option long_options[] = {
+            { "reuse-port",  no_argument,       NULL, GETOPT_VAL_REUSE_PORT },
+            { "fast-open",   no_argument,       NULL, GETOPT_VAL_FAST_OPEN },
+            { "acl",         required_argument, NULL, GETOPT_VAL_ACL },
+            { "mtu",         required_argument, NULL, GETOPT_VAL_MTU },
+            { "mptcp",       no_argument,       NULL, GETOPT_VAL_MPTCP },
+            { "plugin",      required_argument, NULL, GETOPT_VAL_PLUGIN },
+            { "plugin-opts", required_argument, NULL, GETOPT_VAL_PLUGIN_OPTS },
+            { "password",    required_argument, NULL, GETOPT_VAL_PASSWORD },
+            { "key",         required_argument, NULL, GETOPT_VAL_KEY },
+            { "help",        no_argument,       NULL, GETOPT_VAL_HELP },
+            { NULL,          0,                 NULL, 0 }
+    };
+
+    opterr = 0;
+
+    USE_TTY();
+
+#ifdef __ANDROID__
+    while ((c = getopt_long(argc, argv, "f:s:p:l:k:t:m:i:c:b:a:n:huUvV6A",
+                            long_options, NULL)) != -1) {
+#else
+    while ((c = getopt_long(argc, argv, "f:s:p:l:k:t:m:i:c:b:a:n:huUv6A",
+                            long_options, NULL)) != -1) {
+#endif
+        switch (c) {
+            case GETOPT_VAL_FAST_OPEN:
+                fast_open = 1;
+                break;
+            case GETOPT_VAL_ACL:
+                LOGI("initializing acl...");
+                acl = !init_acl(optarg);
+                break;
+            case GETOPT_VAL_MTU:
+                mtu = atoi(optarg);
+                LOGI("set MTU to %d", mtu);
+                break;
+            case GETOPT_VAL_MPTCP:
+                mptcp = 1;
+                LOGI("enable multipath TCP");
+                break;
+            case GETOPT_VAL_PLUGIN:
+                plugin = optarg;
+                break;
+            case GETOPT_VAL_PLUGIN_OPTS:
+                plugin_opts = optarg;
+                break;
+            case GETOPT_VAL_KEY:
+                key = optarg;
+                break;
+            case GETOPT_VAL_REUSE_PORT:
+                reuse_port = 1;
+                break;
+            case 's':
+                if (remote_num < MAX_REMOTE_NUM) {
+                    remote_addr[remote_num].host   = optarg;
+                    remote_addr[remote_num++].port = NULL;
+                }
+                break;
+            case 'p':
+                remote_port = optarg;
+                break;
+            case 'l':
+                local_port = optarg;
+                break;
+            case GETOPT_VAL_PASSWORD:
+            case 'k':
+                password = optarg;
+                break;
+            case 'f':
+                pid_flags = 1;
+                pid_path  = optarg;
+                break;
+            case 't':
+                timeout = optarg;
+                break;
+            case 'm':
+                method = optarg;
+                break;
+            case 'c':
+                conf_path = optarg;
+                break;
+            case 'i':
+                iface = optarg;
+                break;
+            case 'b':
+                local_addr = optarg;
+                break;
+            case 'a':
+                user = optarg;
+                break;
+#ifdef HAVE_SETRLIMIT
+            case 'n':
+                nofile = atoi(optarg);
+                break;
+#endif
+            case 'u':
+                mode = TCP_AND_UDP;
+                break;
+            case 'U':
+                mode = UDP_ONLY;
+                break;
+            case 'v':
+                verbose = 1;
+                break;
+            case 'h':
+            case GETOPT_VAL_HELP:
+                usage();
+                exit(EXIT_SUCCESS);
+            case '6':
+                ipv6first = 1;
+                break;
+#ifdef __ANDROID__
+            case 'V':
+            vpn = 1;
+            break;
+#endif
+            case 'A':
+                FATAL("One time auth has been deprecated. Try AEAD ciphers instead.");
+                break;
+            case '?':
+                // The option character is not recognized.
+                LOGE("Unrecognized option: %s", optarg);
+                opterr = 1;
+                break;
+        }
+    }
+
+    start_ss_local(remote_addr[0].host, remote_port, local_port, password, method, "");
+
+    return 0;
+}
+
+int
+main_old(int argc, char **argv)
 {
     int i, c;
     int pid_flags    = 0;
@@ -1874,3 +2381,5 @@ start_ss_local_server(profile_t profile)
 }
 
 #endif
+
+
