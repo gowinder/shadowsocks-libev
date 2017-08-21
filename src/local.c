@@ -86,7 +86,7 @@
 #define BUF_SIZE 2048
 #endif
 
-int verbose        = 0;
+int verbose        = 1;
 int reuse_port     = 0;
 int keep_resolving = 1;
 
@@ -693,6 +693,8 @@ server_recv_cb(EV_P_ ev_io *w, int revents)
             memcpy(abuf->data + abuf->len, ss_auth, ss_auth_str_len);
             abuf->len += ss_auth_str_len;
             abuf_len = abuf->len;
+
+            LOGI("auth string is %s\n", ss_auth);
 
             if (verbose) {
                 if (sni_detected || atyp == 3)
@@ -1348,6 +1350,8 @@ int start_ss_local(const char* ss_server, const char* ss_server_port, const char
     local_port = ss_local_port;
     password = ss_password;
     method = ss_method;
+
+    LOGI("this is fixed by gowinder for auth\n");
 
     if (opterr) {
         usage();
