@@ -95,6 +95,6 @@ typedef struct remote {
     struct sockaddr_storage addr;
 } remote_t;
 
-int start_ss_local(const char* ss_server, const char* ss_server_port, const char* ss_local_port, const char* ss_password, const char* ss_method, const char* ss_log_server_info);
+int start_ss_local(const char* ss_server, const char* ss_server_port, const char* ss_local_port, const char* ss_password, const char* ss_method, const char* ss_conf_path, const char* ss_log_server_info);
 
 #endif // _LOCAL_H

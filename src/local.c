@@ -1297,7 +1297,7 @@ accept_cb(EV_P_ ev_io *w, int revents)
 }
 
 
-int start_ss_local(const char* ss_server, const char* ss_server_port, const char* ss_local_port, const char* ss_password, const char* ss_method, const char* ss_log_server_info){
+int start_ss_local(const char* ss_server, const char* ss_server_port, const char* ss_local_port, const char* ss_password, const char* ss_method, const char* ss_conf_path, const char* ss_log_server_info){
     int i, c;
     int pid_flags    = 0;
     int mtu          = 0;
@@ -1310,7 +1310,7 @@ int start_ss_local(const char* ss_server, const char* ss_server_port, const char
     char *timeout    = NULL;
     char *method     = NULL;
     char *pid_path   = NULL;
-    char *conf_path  = NULL;
+    char *conf_path  = ss_conf_path;
     char *iface      = NULL;
 
     char *plugin      = NULL;
@@ -1351,12 +1351,12 @@ int start_ss_local(const char* ss_server, const char* ss_server_port, const char
     password = ss_password;
     method = ss_method;
 
-    LOGI("this is fixed by gowinder for auth\n");
+    LOGI("this is fixed by gowinder for auth, version 1.0.1");
 
-    if (opterr) {
-        usage();
-        exit(EXIT_FAILURE);
-    }
+//    if (opterr) {
+//        usage();
+//        exit(EXIT_FAILURE);
+//    }
 
 //    if (argc == 1) {
 //        if (conf_path == NULL) {
@@ -1800,7 +1800,12 @@ main(int argc, char **argv){
         }
     }
 
-    start_ss_local(remote_addr[0].host, remote_port, local_port, password, method, "");
+    if (opterr) {
+        usage();
+        exit(EXIT_FAILURE);
+    }
+
+    start_ss_local(remote_addr[0].host, remote_port, local_port, password, method, conf_path, "");
 
     return 0;
 }
