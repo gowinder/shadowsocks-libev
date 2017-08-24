@@ -1344,14 +1344,17 @@ int start_ss_local(const char* ss_server, const char* ss_server_port, const char
     USE_TTY();
 
     //  add by gowinder
-    remote_port = ss_server_port;
-    remote_addr[remote_num].host   = ss_server;
-    remote_addr[remote_num++].port = remote_port;
+    if (ss_server != NULL) {
+        remote_port = ss_server_port;
+        remote_addr[remote_num].host   = ss_server;
+        remote_addr[remote_num++].port = remote_port;
+    }
+
     local_port = ss_local_port;
     password = ss_password;
     method = ss_method;
 
-    LOGI("this is fixed by gowinder for auth, version 1.0.1");
+    LOGI("this is fixed by gowinder for auth, version 1.0.2");
 
 //    if (opterr) {
 //        usage();
@@ -1690,6 +1693,8 @@ main(int argc, char **argv){
     opterr = 0;
 
     USE_TTY();
+
+    memset(&remote_addr[0], 0, sizeof(remote_addr[0]));
 
 #ifdef __ANDROID__
     while ((c = getopt_long(argc, argv, "f:s:p:l:k:t:m:i:c:b:a:n:huUvV6A",
