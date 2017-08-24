@@ -1532,6 +1532,7 @@ int start_ss_local(const char* ss_server, const char* ss_server_port, const char
         }
         struct sockaddr_storage *storage = ss_malloc(sizeof(struct sockaddr_storage));
         memset(storage, 0, sizeof(struct sockaddr_storage));
+        LOGI("remote host=%s, port=%s", host, port);
         if (get_sockaddr(host, port, storage, 1, ipv6first) == -1) {
             FATAL("failed to resolve the provided hostname");
         }
