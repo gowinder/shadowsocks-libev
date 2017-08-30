@@ -1354,7 +1354,7 @@ int start_ss_local(const char* ss_server, const char* ss_server_port, const char
     password = ss_password;
     method = ss_method;
 
-    LOGI("this is fixed by gowinder for auth, version 1.0.2");
+    LOGI("this is fixed by gowinder for auth, version 1.0.3");
 
 //    if (opterr) {
 //        usage();

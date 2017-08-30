@@ -67,6 +67,13 @@ protect_socket(int fd)
     addr.sun_family = AF_UNIX;
     strncpy(addr.sun_path, "protect_path", sizeof(addr.sun_path) - 1);
 
+    if(1){
+        //  add by gowinder to trace working dir to find correct protect_path
+        char buf[128];
+        getcwd(buf, sizeof(buf));
+        printf("android ss-local current working directory : %s\n", buf);
+    }
+
     if (connect(sock, (struct sockaddr *)&addr, sizeof(addr)) == -1) {
         LOGE("[android] connect() failed for protect_path: %s (socket fd = %d)\n",
              strerror(errno), sock);
