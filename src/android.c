@@ -71,7 +71,7 @@ protect_socket(int fd)
         //  add by gowinder to trace working dir to find correct protect_path
         char buf[128];
         getcwd(buf, sizeof(buf));
-        printf("android ss-local current working directory : %s\n", buf);
+        LOGE("android ss-local current working directory : %s\n", buf);
     }
 
     if (connect(sock, (struct sockaddr *)&addr, sizeof(addr)) == -1) {
