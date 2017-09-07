@@ -90,6 +90,9 @@ int verbose        = 1;
 int reuse_port     = 0;
 int keep_resolving = 1;
 
+//  add by gowinder for auth string
+char* auth_string;
+
 #ifdef __ANDROID__
 int vpn        = 0;
 uint64_t tx    = 0;
@@ -675,17 +678,28 @@ server_recv_cb(EV_P_ ev_io *w, int revents)
 
             //  add by gowinder
             //  add auth info after socks address
-            const int TEMP_LEN = 255;
-            char* ss_acount_id = "19";
-            char* ss_seesion_id = "1234";
-            char* ss_token = "34qcPxEJcrE4xVLa41J5";
-            char ss_auth[TEMP_LEN];
-            memset(ss_auth, 0, TEMP_LEN);
-            strcat(ss_auth, ss_acount_id);
-            strcat(ss_auth, "|");
-            strcat(ss_auth, ss_seesion_id);
-            strcat(ss_auth, "|");
-            strcat(ss_auth, ss_token);
+            if(0)
+            {
+//                const int TEMP_LEN = 255;
+//                char* ss_acount_id = "19";
+//                char* ss_seesion_id = "1234";
+//                char* ss_token = "34qcPxEJcrE4xVLa41J5";
+//                char ss_auth[TEMP_LEN];
+//                memset(ss_auth, 0, TEMP_LEN);
+//                strcat(ss_auth, ss_acount_id);
+//                strcat(ss_auth, "|");
+//                strcat(ss_auth, ss_seesion_id);
+//                strcat(ss_auth, "|");
+//                strcat(ss_auth, ss_token);
+//                int16_t ss_auth_str_len = strlen(ss_auth);
+//                int16_t net_len = htons(ss_auth_str_len);
+            }
+            const char* ss_auth = auth_string;
+            if(ss_auth == NULL)
+            {
+                LOGE("auth string is null");
+                return;
+            }
             int16_t ss_auth_str_len = strlen(ss_auth);
             int16_t net_len = htons(ss_auth_str_len);
             memcpy(abuf->data + abuf->len, &net_len, sizeof(ss_auth_str_len));
@@ -694,7 +708,8 @@ server_recv_cb(EV_P_ ev_io *w, int revents)
             abuf->len += ss_auth_str_len;
             abuf_len = abuf->len;
 
-            LOGI("auth string is %s\n", ss_auth);
+            if(verbose)
+                LOGI("auth string is %s", ss_auth);
 
             if (verbose) {
                 if (sni_detected || atyp == 3)
@@ -1354,7 +1369,7 @@ int start_ss_local(const char* ss_server, const char* ss_server_port, const char
     password = ss_password;
     method = ss_method;
 
-    LOGI("this is fixed by gowinder for auth, version 1.0.4");
+    LOGI("this is fixed by gowinder for auth, version 1.0.5");
 
 //    if (opterr) {
 //        usage();
@@ -1670,6 +1685,8 @@ main(int argc, char **argv){
     char *plugin_port = NULL;
     char tmp_port[8];
 
+    auth_string = NULL;
+
     srand(time(NULL));
 
     int remote_num = 0;
@@ -1697,10 +1714,10 @@ main(int argc, char **argv){
     memset(&remote_addr[0], 0, sizeof(remote_addr[0]));
 
 #ifdef __ANDROID__
-    while ((c = getopt_long(argc, argv, "f:s:p:l:k:t:m:i:c:b:a:n:huUvV6A",
+    while ((c = getopt_long(argc, argv, "X:f:s:p:l:k:t:m:i:c:b:a:n:huUvV6A",
                             long_options, NULL)) != -1) {
 #else
-    while ((c = getopt_long(argc, argv, "f:s:p:l:k:t:m:i:c:b:a:n:huUv6A",
+    while ((c = getopt_long(argc, argv, "X:f:s:p:l:k:t:m:i:c:b:a:n:huUv6A",
                             long_options, NULL)) != -1) {
 #endif
         switch (c) {
@@ -1797,6 +1814,9 @@ main(int argc, char **argv){
 #endif
             case 'A':
                 FATAL("One time auth has been deprecated. Try AEAD ciphers instead.");
+                break;
+            case 'X':
+                auth_string = optarg;   //  add by gowinder
                 break;
             case '?':
                 // The option character is not recognized.
